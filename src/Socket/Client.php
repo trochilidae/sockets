@@ -6,7 +6,7 @@
  * Time: 14:31
  */
 
-namespace krinfreschi\Stream\Socket;
+namespace trochilidae\Sockets\Socket;
 
 class Client {
 

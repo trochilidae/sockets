@@ -6,7 +6,7 @@
  * Time: 20:21
  */
 
-namespace krinfreschi\Stream\Exceptions;
+namespace trochilidae\Sockets\Exceptions;
 
 
 class InvalidResourceException extends \Exception {

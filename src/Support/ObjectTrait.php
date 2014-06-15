@@ -6,7 +6,7 @@
  * Time: 12:47
  */
 
-namespace krinfreschi\Stream\Support;
+namespace trochilidae\Sockets\Support;
 
 
 trait ObjectTrait {

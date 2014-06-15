@@ -6,7 +6,7 @@
  * Time: 17:17
  */
 
-namespace krinfreschi\Stream;
+namespace trochilidae\Sockets;
 
 use React\EventLoop\LoopInterface;
 

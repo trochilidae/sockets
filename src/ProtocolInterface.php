@@ -6,7 +6,7 @@
  * Time: 18:37
  */
 
-namespace krinfreschi\Stream;
+namespace trochilidae\Sockets;
 
 
 interface ProtocolInterface {

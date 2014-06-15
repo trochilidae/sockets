@@ -1,5 +1,5 @@
 {
-    "name": "krinfreschi/stream",
+    "name": "trochilidae/sockets",
     "license": "MIT",
     "authors": [
         {
@@ -10,15 +10,12 @@
     "minimum-stability": "stable",
     "require": {
         "react/event-loop": "0.4.*",
-        "illuminate/events": "4.2.*",
         "illuminate/container": "4.2.*",
-        "illuminate/support": "4.2.*",
-        "illuminate/config": "4.2.*"
+        "illuminate/support": "4.2.*"
     },
     "autoload": {
         "psr-4":{
-            "krinfreschi\\Stream\\": "src",
-            "Illuminate\\Foundation\\": "src/Illuminate"
+            "trochilidae\\Sockets\\": "src"
         },
         "files": [
             "src/Helpers/Helper.php",

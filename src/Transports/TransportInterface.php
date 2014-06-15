@@ -6,7 +6,7 @@
  * Time: 21:05
  */
 
-namespace krinfreschi\Stream\Transports;
+namespace trochilidae\Sockets\Transports;
 
 interface TransportInterface {
 

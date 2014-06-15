@@ -6,45 +6,30 @@
  * Time: 16:39
  */
 
-namespace krinfreschi\Stream\Protocols;
+namespace trochilidae\Sockets\Protocols;
 
-use krinfreschi\Stream\Protocol;
-use krinfreschi\Stream\Resource;
-use krinfreschi\Stream\ResourceManager;
+use trochilidae\Sockets\Protocol;
+use trochilidae\Sockets\Resource;
+use trochilidae\Sockets\ResourceManager;
 
-class sslProtocol extends Protocol{
+class sslProtocol extends Protocol
+{
 
-    protected $resources = [];
-
-    protected $storage = [];
-
-    /**
-     * @var ResourceManager
-     */
-    protected $resourceManager;
-
-    function __construct(ResourceManager $resourceManager)
+    function read(Resource $resource)
     {
-        $this->resourceManager = $resourceManager;
-    }
-
-    function read(Resource $resource){
-        $this->resources[$resource->getHash()] = $resource;
-        //setup if need
         $ret = stream_socket_enable_crypto($resource->getHandle(), STREAM_CRYPTO_METHOD_SSLv23_SERVER);
-        if($ret === false){
-            //throw an exception
-        }else if($ret === 0){
-            $this->resources[$resource->getHash()] = $ret;
-            $this->resourceManager->read($resource);
-            //send back to stream select to return when more data
-            return;
+
+        if ($ret === false) {
+            throw new \Exception("Unable to make secure");
+        } else if ($ret === 0) {
+            return false;
         }
-        //send to next protocol
-        $this->resourceManager->next($resource);
+
+        return $resource;
     }
 
-    function write(Resource $resource){
+    function write(Resource $resource)
+    {
 
     }
 

@@ -6,13 +6,13 @@
  * Time: 13:55
  */
 
-namespace krinfreschi\Stream;
+namespace trochilidae\Sockets;
 
-use krinfreschi\Stream\Exceptions\InvalidArgumentException;
-use krinfreschi\Stream\Support\ObjectTrait;
-use krinfreschi\Stream\Transports\TransportInterface;
+use trochilidae\Sockets\Exceptions\InvalidArgumentException;
+use trochilidae\Sockets\Support\ObjectTrait;
+use trochilidae\Sockets\Transports\TransportInterface;
 use React\EventLoop\LoopInterface;
-use krinfreschi\Stream\Exceptions\InvalidResourceException;
+use trochilidae\Sockets\Exceptions\InvalidResourceException;
 
 class Resource
 {
@@ -40,7 +40,7 @@ class Resource
      */
     protected $isWritable;
 
-    protected $isPaused;
+    protected $isPaused = true;
 
     /**
      * @var ResourceManager
@@ -105,8 +105,8 @@ class Resource
     }
 
     function resume(){
-        $this->resourceManager->resume($this);
         $this->isPaused = false;
+        $this->resourceManager->resume($this);
     }
 
     /**

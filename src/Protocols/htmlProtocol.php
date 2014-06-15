@@ -6,10 +6,10 @@
  * Time: 16:39
  */
 
-namespace krinfreschi\Stream\Protocols;
+namespace trochilidae\Sockets\Protocols;
 
-use krinfreschi\Stream\Protocol;
-use krinfreschi\Stream\Resource;
+use trochilidae\Sockets\Protocol;
+use trochilidae\Sockets\Resource;
 
 class htmlProtocol extends Protocol{
 

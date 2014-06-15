@@ -6,7 +6,7 @@
  * Time: 21:10
  */
 
-namespace krinfreschi\Stream\Transports;
+namespace trochilidae\Sockets\Transports;
 
 class ResourceTransport implements TransportInterface
 {
@@ -33,6 +33,7 @@ class ResourceTransport implements TransportInterface
      */
     public function __construct($handle)
     {
+        $this->handle     = $handle;
         $this->meta       = stream_get_meta_data($this->handle);
         $this->access     = stream_get_access($this->handle, $this->meta);
         $this->isReadable = $this->access["read"];

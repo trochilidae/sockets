@@ -6,10 +6,10 @@
  * Time: 14:40
  */
 
-namespace krinfreschi\Stream;
+namespace trochilidae\Sockets;
 
 
-use krinfreschi\Stream\Exceptions\InvalidArgumentException;
+use trochilidae\Sockets\Exceptions\InvalidArgumentException;
 
 class Buffer {
 
@@ -21,7 +21,7 @@ class Buffer {
     protected $maxSize = 1024;
 
     /**
-     * @var \krinfreschi\Stream\Resource
+     * @var \trochilidae\Sockets\Resource
      */
     protected $resource;
 
@@ -32,7 +32,7 @@ class Buffer {
     }
 
     /**
-     * @param \krinfreschi\Stream\Resource|Resource $resource
+     * @param \trochilidae\Sockets\Resource|Resource $resource
      */
     public function setResource(Resource $resource)
     {

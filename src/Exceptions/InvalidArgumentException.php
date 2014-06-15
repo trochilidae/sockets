@@ -6,7 +6,7 @@
  * Time: 23:53
  */
 
-namespace krinfreschi\Stream\Exceptions;
+namespace trochilidae\Sockets\Exceptions;
 
 
 class InvalidArgumentException extends \Exception{
