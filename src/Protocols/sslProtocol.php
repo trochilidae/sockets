@@ -8,14 +8,14 @@
 
 namespace trochilidae\Sockets\Protocols;
 
+use trochilidae\Sockets\Message\MessageBuilder;
 use trochilidae\Sockets\Protocol;
 use trochilidae\Sockets\Resource;
-use trochilidae\Sockets\ResourceManager;
 
 class sslProtocol extends Protocol
 {
 
-    function read(Resource $resource)
+    function onRead(Resource $resource, MessageBuilder $message)
     {
         $ret = stream_socket_enable_crypto($resource->getHandle(), STREAM_CRYPTO_METHOD_SSLv23_SERVER);
 
@@ -27,11 +27,5 @@ class sslProtocol extends Protocol
 
         return $resource;
     }
-
-    function write(Resource $resource)
-    {
-
-    }
-
 
 }

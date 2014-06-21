@@ -9,6 +9,7 @@
 namespace trochilidae\Sockets;
 
 use Illuminate\Container\Container;
+use Illuminate\Events\Dispatcher;
 use React\EventLoop\Factory;
 use React\EventLoop\LoopInterface;
 
@@ -36,6 +37,7 @@ class Application extends Container
 
         $this->instance("app", $app);
         $this->instance("loop", $loop);
+        $this->instance("events", new Dispatcher($this));
 
         $this->bind("resource", function($container, $parameters) use ($app){
             return $app->make('trochilidae\Sockets\Resource', $parameters);
@@ -54,7 +56,8 @@ class Application extends Container
             "server" => 'trochilidae\Sockets\Socket\Server',
             "client" => 'trochilidae\Sockets\Socket\Client',
             "socket.server" => 'trochilidae\Sockets\Socket\Server',
-            "socket.client" => 'trochilidae\Sockets\Socket\Client'
+            "socket.client" => 'trochilidae\Sockets\Socket\Client',
+            "events" => 'Illuminate\Events\Dispatcher'
         ];
 
         foreach($aliases as $key => $alias){

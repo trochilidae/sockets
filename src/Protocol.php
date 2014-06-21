@@ -9,8 +9,9 @@
 namespace trochilidae\Sockets;
 
 use React\EventLoop\LoopInterface;
+use trochilidae\Sockets\Message\MessageBuilder;
 
-abstract class Protocol implements ProtocolInterface {
+abstract class Protocol {
 
     /**
      * @var LoopInterface
@@ -24,5 +25,11 @@ abstract class Protocol implements ProtocolInterface {
     {
         $this->loop = $loop;
     }
+
+    abstract function onRead(Resource $resource, MessageBuilder $message);
+
+    abstract function onWrite(Resource $resource, $message);
+
+    abstract function onClose(Resource $resource);
 
 } 

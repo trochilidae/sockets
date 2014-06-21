@@ -13,13 +13,4 @@ use trochilidae\Sockets\Resource;
 
 class htmlProtocol extends Protocol{
 
-    function write(Resource $resource){
-        //setup if need
-        //encode
-    }
-
-    function read(Resource $resource){
-        //setup if need
-        //decode
-    }
 }

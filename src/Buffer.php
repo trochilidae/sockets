@@ -8,55 +8,121 @@
 
 namespace trochilidae\Sockets;
 
-
-use trochilidae\Sockets\Exceptions\InvalidArgumentException;
-
-class Buffer {
+class Buffer
+{
+    //TODO: Impose strict limits if needed such as pausing all resources using the buffer
 
     /**
      * @var array
      */
     protected $queue = [];
 
+    /**
+     * @var int
+     */
+    protected $length = 0;
+
+    /**
+     * @var int
+     */
     protected $maxSize = 1024;
 
     /**
-     * @var \trochilidae\Sockets\Resource
-     */
-    protected $resource;
-
-
-    public function __construct()
-    {
-
-    }
-
-    /**
-     * @param \trochilidae\Sockets\Resource|Resource $resource
-     */
-    public function setResource(Resource $resource)
-    {
-        $this->resource = $resource;
-    }
-
-
-    /**
-     * @param string $message
+     * @param \trochilidae\Sockets\Resource $resource
+     * @param string                        $message
      *
-     * @throws Exceptions\InvalidArgumentException
      * @return bool
      */
-    public function write($message){
-        $this->queue[] = $message;
-        return false;
+    public function write(Resource $resource, $message)
+    {
+        $key = $this->getKey($resource->getHandle());
+        if (!isset($this->queue[$key])) {
+            $this->queue[$key] = [];
+        }
+        $this->queue[$key][] = $message;
+        $this->length += strlen($message);
+
+        return $this->length >= $this->maxSize;
     }
 
-    protected function getSize(){
-        $size = 0;
-        array_walk($this->queue, function($value) use (&$size){
-            $size += strlen($value);
+    /**
+     * @param resource $handle
+     *
+     * @return mixed|null
+     */
+    public function pop($handle)
+    {
+        $key = $this->getKey($handle);
+
+        if (!isset($this->queue[$key])) {
+            return null;
+        }
+
+        $message = array_pop($this->queue[$key]);
+        if (!is_null($message)) {
+            $this->length -= strlen($message);
+
+            return $message;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param resource $handle
+     *
+     * @return array
+     */
+    public function pull($handle)
+    {
+        $key      = $this->getKey($handle);
+        $messages = [];
+        if (isset($this->queue[$key])) {
+            $messages = $this->queue[$key];
+            unset($this->queue[$key]);
+            $this->length -= $this->getSize($messages);
+        }
+
+        return $messages;
+    }
+
+    /**
+     * @param resource $handle
+     * @param array    $messages
+     */
+    public function set($handle, array $messages = [])
+    {
+        $key = (int)$handle;
+        if (isset($this->queue[$key])) {
+            $this->length -= $this->getSize($this->queue[$key]);
+        }
+        $this->queue[$key] = $messages;
+        $this->length += $this->getSize($messages);
+    }
+
+    /**
+     * @param array $messages
+     *
+     * @return int
+     */
+    protected function getSize(array &$messages)
+    {
+        $len = 0;
+        array_walk($messages, function ($value) use (&$len) {
+            $len += strlen($value);
         });
-        return $size;
+
+        return $len;
+    }
+
+    /**
+     * @param resource $handle
+     *
+     * @return int
+     */
+    protected function getKey($handle)
+    {
+        return (int)$handle;
     }
 
 } 

@@ -9,37 +9,34 @@
 namespace trochilidae\Sockets;
 
 use trochilidae\Sockets\Exceptions\InvalidArgumentException;
+use trochilidae\Sockets\Message\MessageBuilder;
 use trochilidae\Sockets\Support\ObjectTrait;
-use trochilidae\Sockets\Transports\TransportInterface;
-use React\EventLoop\LoopInterface;
 use trochilidae\Sockets\Exceptions\InvalidResourceException;
 
 class Resource
 {
+    //TODO: Find best returns for if resource is closed or resource manager not assigned
+
     use ObjectTrait;
 
+    /**
+     * Asynchronous Flag (Default)
+     */
     const Async = 0x1;
-    const Sync  = 0x2;
 
     /**
-     * @var TransportInterface
+     * Synchronous Flag
+     */
+    const Sync = 0x2;
+
+    /**
+     * @var Transport
      */
     protected $transport;
 
-    protected $meta;
-
-    protected $access;
-
     /**
      * @var bool
      */
-    protected $isReadable;
-
-    /**
-     * @var bool
-     */
-    protected $isWritable;
-
     protected $isPaused = true;
 
     /**
@@ -53,38 +50,77 @@ class Resource
     protected $buffer;
 
     /**
-     * @param TransportInterface                              $transport
+     * @var array
+     */
+    protected $storage = [];
+
+    /**
+     * @var MessageBuilder
+     */
+    protected $messageBuilder;
+
+    /**
+     * @param Transport                                       $transport
      * @param                                                 $flags
-     *
-     * @param Buffer                                          $buffer
-     * @param ResourceManager                                 $resourceManager
      *
      * @throws Exceptions\InvalidResourceException
      */
-    public function __construct(TransportInterface $transport, $flags = null, Buffer $buffer, ResourceManager $resourceManager)
+    public function __construct(Transport $transport, $flags = null)
     {
         if ($transport->isClosed()) {
             throw new InvalidResourceException();
         }
 
         $this->transport = $transport;
-        $this->resourceManager = $resourceManager;
-        $this->buffer = $buffer;
 
         if (($flags & self::Sync) != 0) {
             $transport->setBlocking();
-        }else{
+        } else {
             $transport->setNonBlocking();
         }
-
-        $this->resourceManager->attach($this);
     }
 
     /**
      * @param ResourceManager $resourceManager
      */
-    public function setResourceManager(ResourceManager $resourceManager){
+    public function setResourceManager(ResourceManager $resourceManager)
+    {
+        //TODO: Think about messages already in buffer requiring specific protocols
+        if (!is_null($this->resourceManager)) {
+            $this->resourceManager->detach($this);
+        }
         $this->resourceManager = $resourceManager;
+        $resourceManager->attach($this);
+    }
+
+    /**
+     * @param Buffer $buffer
+     */
+    public function setBuffer(Buffer $buffer)
+    {
+        $handle   = $this->getHandle();
+        $messages = [];
+        if (!is_null($this->buffer)) {
+            $messages = $this->buffer->pull($handle);
+        }
+        $this->buffer = $buffer;
+        $buffer->set($handle, $messages);
+    }
+
+    /**
+     * @param MessageBuilder $messageBuilder
+     */
+    public function setMessageBuilder(MessageBuilder $messageBuilder)
+    {
+        $this->messageBuilder = $messageBuilder;
+    }
+
+    public function getMessageBuilder()
+    {
+        if(is_null($this->messageBuilder)){
+            $this->messageBuilder = new MessageBuilder($this);
+        }
+        return $this->messageBuilder;
     }
 
     /**
@@ -95,18 +131,95 @@ class Resource
         return $this->buffer;
     }
 
-    public function isPaused(){
+    /**
+     * @return \trochilidae\Sockets\Transport
+     */
+    public function getTransport()
+    {
+        return $this->transport;
+    }
+
+    /**
+     * @return resource
+     */
+    public function getHandle()
+    {
+        return $this->transport->getHandle();
+    }
+
+    /**
+     * @return bool
+     */
+    public function isSync()
+    {
+        return $this->transport->isSync();
+    }
+
+    public function isReadable(){
+        return $this->transport->isReadable();
+    }
+
+    public function isWritable(){
+        return $this->transport->isWritable();
+    }
+
+    /**
+     * @return bool
+     */
+    public function isPaused()
+    {
         return $this->isPaused;
     }
 
-    function pause(){
-        $this->resourceManager->pause($this);
+    /**
+     * @return bool
+     */
+    public function isClosed()
+    {
+        return $this->transport->isClosed();
+    }
+
+    /**
+     * @return bool
+     */
+    public function isEnd()
+    {
+        return $this->transport->isEnd();
+    }
+
+    /**
+     * Pause read and write on the resource
+     * @return void
+     */
+    public function pause()
+    {
+        if ($this->resourceManager) {
+            $this->resourceManager->pause($this);
+        }
         $this->isPaused = true;
     }
 
-    function resume(){
+    /**
+     * Resume read and write on the resource
+     */
+    public function resume()
+    {
+        if ($this->resourceManager) {
+            $this->resourceManager->resume($this);
+        }
         $this->isPaused = false;
-        $this->resourceManager->resume($this);
+    }
+
+    /**
+     * @return bool|string
+     */
+    public function read()
+    {
+        if ($this->resourceManager && $this->isReadable() && !$this->isClosed() && $this->isSync()) {
+            return $this->resourceManager->read($this);
+        }
+
+        return false;
     }
 
     /**
@@ -116,14 +229,37 @@ class Resource
      */
     public function write($message)
     {
-        if(!$this->isPaused()){
-            return $this->buffer->write($message);
+        //TODO: handle buffer not defined
+        if ($this->resourceManager && !$this->isClosed() && !$this->isPaused()) {
+            return $this->buffer->write($this, $message);
         }
+
         return false;
     }
 
-    public function getHandle(){
-        return $this->transport->getHandle();
+    public function close(){
+        return $this->resourceManager->close($this);
+    }
+
+    /**
+     * @param $name
+     *
+     * @return mixed
+     */
+    public function __get($name)
+    {
+        if (isset($this->storage[$name])) {
+            return $this->storage[$name];
+        }
+    }
+
+    /**
+     * @param $name
+     * @param $value
+     */
+    public function __set($name, $value)
+    {
+        $this->storage[$name] = $value;
     }
 
 }

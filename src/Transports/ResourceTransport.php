@@ -8,7 +8,9 @@
 
 namespace trochilidae\Sockets\Transports;
 
-class ResourceTransport implements TransportInterface
+use trochilidae\Sockets\Transport;
+
+class ResourceTransport implements Transport
 {
 
     /**
@@ -72,6 +74,10 @@ class ResourceTransport implements TransportInterface
         return fwrite($this->handle, $message);
     }
 
+    public function close(){
+        return fclose($this->handle);
+    }
+
     /**
      * @return bool
      */
@@ -100,6 +106,14 @@ class ResourceTransport implements TransportInterface
      * @return bool
      */
     public function isClosed()
+    {
+        return stream_closed($this->handle);
+    }
+
+    /**
+     * @return bool
+     */
+    public function isEnd()
     {
         return stream_eof($this->handle);
     }

@@ -6,9 +6,9 @@
  * Time: 21:05
  */
 
-namespace trochilidae\Sockets\Transports;
+namespace trochilidae\Sockets;
 
-interface TransportInterface {
+interface Transport {
 
     /**
      * @return resource
@@ -28,6 +28,11 @@ interface TransportInterface {
      * @return null|bool|int
      */
     public function write($message);
+
+    /**
+     * @return bool
+     */
+    public function close();
 
     /**
      * @return bool
@@ -53,6 +58,11 @@ interface TransportInterface {
      * @return bool
      */
     public function isClosed();
+
+    /**
+     * @return bool
+     */
+    public function isEnd();
 
     /**
      * @return bool
