@@ -6,13 +6,13 @@
  * Time: 16:38
  */
 
-namespace trochilidae\Sockets\Message;
+namespace trochilidae\Sockets;
 
 use trochilidae\Sockets\Message;
 use trochilidae\Sockets\Resource;
-use trochilidae\Sockets\Transports\Transport;
+use trochilidae\Sockets\Transport;
 
-class MessageBuilder {
+class StreamReader {
 
     /**
      * @var Resource
@@ -60,26 +60,6 @@ class MessageBuilder {
     }
 
     /**
-     * @param $message
-     */
-    public function setMessage($message){
-        if(is_string($message)){
-            $message = new PlainMessage($message);
-        }
-        $this->message = $message;
-    }
-
-    /**
-     * @return Message
-     */
-    public function getMessage(){
-        if(is_null($this->message)){
-            $this->message = new PlainMessage();
-        }
-        return $this->message;
-    }
-
-    /**
      * Consumes data from the read buffer and stores it in an internal buffer
      *
      * @param $length
@@ -88,7 +68,7 @@ class MessageBuilder {
      */
     public function peak($length){
         $seen = strlen($this->seen);
-        if($toRead = ($length - $seen) > 0){
+        if(($toRead = $length - $seen) > 0){
             $this->seen .= $this->transport->read($toRead);
         }
         return substr($this->seen, 0, $length);
@@ -104,8 +84,12 @@ class MessageBuilder {
     public function read($length){
         $seen = strlen($this->seen);
         if($length <= $seen){
-            return substr($this->seen, 0, $length);
+            $str = substr($this->seen, 0, $length);
+            $this->seen = substr($this->seen, $length);
+            return $str;
         }
-        return $this->seen . $this->transport->read($length - $seen);
+        $str = $this->seen . $this->transport->read($length - $seen);
+        $this->seen = "";
+        return $str;
     }
 } 

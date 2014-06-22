@@ -9,7 +9,7 @@
 namespace trochilidae\Sockets;
 
 use trochilidae\Sockets\Exceptions\InvalidArgumentException;
-use trochilidae\Sockets\Message\MessageBuilder;
+use trochilidae\Sockets\StreamReader;
 use trochilidae\Sockets\Support\ObjectTrait;
 use trochilidae\Sockets\Exceptions\InvalidResourceException;
 
@@ -55,9 +55,9 @@ class Resource
     protected $storage = [];
 
     /**
-     * @var MessageBuilder
+     * @var StreamReader
      */
-    protected $messageBuilder;
+    protected $streamReader;
 
     /**
      * @param Transport                                       $transport
@@ -108,19 +108,19 @@ class Resource
     }
 
     /**
-     * @param MessageBuilder $messageBuilder
+     * @param StreamReader $streamReader
      */
-    public function setMessageBuilder(MessageBuilder $messageBuilder)
+    public function setStreamReader(StreamReader $streamReader)
     {
-        $this->messageBuilder = $messageBuilder;
+        $this->streamReader = $streamReader;
     }
 
-    public function getMessageBuilder()
+    public function getStreamReader()
     {
-        if(is_null($this->messageBuilder)){
-            $this->messageBuilder = new MessageBuilder($this);
+        if(is_null($this->streamReader)){
+            $this->streamReader = new StreamReader($this);
         }
-        return $this->messageBuilder;
+        return $this->streamReader;
     }
 
     /**
@@ -231,7 +231,7 @@ class Resource
     {
         //TODO: handle buffer not defined
         if ($this->resourceManager && !$this->isClosed() && !$this->isPaused()) {
-            return $this->buffer->write($this, $message);
+            return $this->resourceManager->write($this, $message);
         }
 
         return false;
@@ -239,6 +239,16 @@ class Resource
 
     public function close(){
         return $this->resourceManager->close($this);
+    }
+
+    function __isset($name)
+    {
+        return isset($this->storage[$name]);
+    }
+
+    function __unset($name)
+    {
+        unset($this->storage[$name]);
     }
 
     /**

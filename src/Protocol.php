@@ -13,22 +13,9 @@ use trochilidae\Sockets\Message\MessageBuilder;
 
 abstract class Protocol {
 
-    /**
-     * @var LoopInterface
-     */
-    protected $loop;
+    abstract function onRead(StreamReader $reader, MessageEnvelope $message);
 
-    /**
-     * @param LoopInterface $loop
-     */
-    function __construct(LoopInterface $loop)
-    {
-        $this->loop = $loop;
-    }
-
-    abstract function onRead(Resource $resource, MessageBuilder $message);
-
-    abstract function onWrite(Resource $resource, $message);
+    abstract function onWrite(MessageEnvelope $message);
 
     abstract function onClose(Resource $resource);
 

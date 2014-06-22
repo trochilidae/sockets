@@ -45,6 +45,22 @@ class Buffer
         return $this->length >= $this->maxSize;
     }
 
+    public function isEmpty(Resource $resource){
+        $key = $this->getKey($resource->getHandle());
+        return empty($this->queue[$key]);
+    }
+
+    public function unshift(Resource $resource, $message){
+        $key = $this->getKey($resource->getHandle());
+        if (!isset($this->queue[$key])) {
+            $this->queue[$key] = [];
+        }
+        array_unshift($this->queue[$key], $message);
+        $this->length += strlen($message);
+
+        return $this->length >= $this->maxSize;
+    }
+
     /**
      * @param resource $handle
      *
@@ -61,7 +77,6 @@ class Buffer
         $message = array_pop($this->queue[$key]);
         if (!is_null($message)) {
             $this->length -= strlen($message);
-
             return $message;
         }
 
