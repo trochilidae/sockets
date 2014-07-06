@@ -8,9 +8,9 @@
 
 namespace trochilidae\Sockets;
 
-use Illuminate\Events\Dispatcher;
+use Evenement\EventEmitter;
+use React\EventLoop\Factory;
 use trochilidae\Sockets\Exceptions\InvalidArgumentException;
-use React\EventLoop\Timer\Timer;
 use React\EventLoop\LoopInterface;
 use trochilidae\Sockets\Message\PlainMessage;
 
@@ -23,7 +23,7 @@ class ResourceManager
     protected $loop;
 
     /**
-     * @var \SplDoublyLinkedList
+     * @var ProtocolList
      */
     protected $protocols;
 
@@ -35,56 +35,53 @@ class ResourceManager
     /**
      * @var array
      */
-    protected $asyncWriteHandle = "handleAsyncwrite";
+    protected $asyncWriteHandle = "handleAsyncWrite";
 
     /**
-     * @var \SplObjectStorage
+     * @var array
      */
-    protected $resources;
+    protected $resources = [];
 
     /**
      * @var array
      */
     protected $handles;
 
+    /**
+     * @var array
+     */
     protected $pendingMessages = [];
 
     /**
-     * @var \Illuminate\Events\Dispatcher
+     * @var EventEmitter
      */
-    protected $events;
+    protected $emitter;
 
     /**
-     * @param \Illuminate\Events\Dispatcher $events
-     * @param LoopInterface                 $loop
+     * @param LoopInterface $loop
      */
-    function __construct(Dispatcher $events, LoopInterface $loop)
+    function __construct(LoopInterface $loop = null)
     {
+        if(is_null($loop)){
+            $loop = Factory::create();
+        }
         $this->loop      = $loop;
-        $this->resources = new \SplObjectStorage;
-        $this->events    = $events;
-        $this->protocols = new \SplDoublyLinkedList();
+        $this->protocols = new ProtocolList();
+        $this->emitter = new EventEmitter();
     }
 
     /**
-     * @param $protocol
-     *
-     * @throws Exceptions\InvalidArgumentException
+     * @param EventEmitter $emitter
      */
-    public function setProtocol($protocol)
-    {
-        if (!is_array($protocol) || (!is_object($protocol) && $protocol instanceof Protocol)) {
-            throw new InvalidArgumentException();
-        }
-        $this->protocols = new \SplDoublyLinkedList();
-        foreach ($protocol as $item) {
-            if (gettype($item) !== "object") {
-                throw new InvalidArgumentException("Expected object got [" . gettype($item) . "]");
-            } else if (!($item instanceof Protocol)) {
-                throw new InvalidArgumentException("Expected Protocol got [" . get_class($item) . "]");
-            }
-            $this->protocols->push($item);
-        }
+    public function setEventEmitter(EventEmitter $emitter){
+        $this->emitter = $emitter;
+    }
+
+    /**
+     * @return \React\EventLoop\ExtEventLoop|\React\EventLoop\LibEventLoop|\React\EventLoop\LibEvLoop|LoopInterface|\React\EventLoop\StreamSelectLoop
+     */
+    public function getLoop(){
+        return $this->loop;
     }
 
     /**
@@ -92,8 +89,10 @@ class ResourceManager
      */
     public function attach(Resource $resource)
     {
-        $this->resources->attach($resource);
-        $this->handles[(int)$resource->getHandle()] = & $resource;
+        $handle = $resource->getHandle();
+        $this->resources[$handle->toInt()] = $resource;
+        $this->handles[$handle->toInt()] = $handle;
+
         if ($resource->isPaused()) {
             $resource->resume();
         }
@@ -106,8 +105,37 @@ class ResourceManager
     public function detach(Resource $resource)
     {
         $resource->pause();
-        $this->resources->detach($resource);
-        unset($this->handles[(int)$resource->getHandle()]);
+        $handle = $resource->getHandle();
+        unset($this->resources[$handle->toInt()]);
+        unset($this->handles[$handle->toInt()]);
+    }
+
+    /**
+     * @param $protocol
+     *
+     * @throws Exceptions\InvalidArgumentException
+     */
+    public function setProtocols($protocol)
+    {
+        if (!is_array($protocol) || (!is_object($protocol) && $protocol instanceof Protocol)) {
+            throw new InvalidArgumentException();
+        }
+        $this->protocols = new ProtocolList();
+        foreach ($protocol as $item) {
+            if (gettype($item) !== "object") {
+                throw new InvalidArgumentException("Expected object got [" . gettype($item) . "]");
+            } else if (!($item instanceof Protocol)) {
+                throw new InvalidArgumentException("Expected Protocol got [" . get_class($item) . "]");
+            }
+            $this->protocols->push($item);
+        }
+    }
+
+    /**
+     * @return ProtocolList
+     */
+    public function getProtocols(){
+        return $this->protocols;
     }
 
     /**
@@ -154,6 +182,9 @@ class ResourceManager
     {
         if (!$resource->isReadable() || $resource->isClosed()) {
             return null;
+        }else if ($resource->isEnd()) {
+            $resource->close();
+            return null;
         }
 
         /**
@@ -161,35 +192,30 @@ class ResourceManager
          */
         if(isset($this->pendingMessages[$resource->id])){
             $messageEnvelope = $this->pendingMessages[$resource->id];
-            $protocols = $messageEnvelope->getProtocols();
         }else {
-            $protocols = clone $this->protocols;
-            $protocols->setIteratorMode(\SplDoublyLinkedList::IT_MODE_FIFO);
-            $protocols->rewind();
-            $messageEnvelope = $this->pendingMessages[$resource->id] = new MessageEnvelope($resource, $protocols);
+            $messageEnvelope = MessageEnvelope::make($resource);
+            $messageEnvelope->getProtocols()->setIteratorMode(\SplDoublyLinkedList::IT_MODE_FIFO);
+            $this->pendingMessages[$resource->id] = $messageEnvelope;
         }
+        $protocols = $messageEnvelope->getProtocols();
+        $handle = $resource->getHandle();
+        $streamReader = $handle->getStreamReader();
 
         if ($protocols->isEmpty()) { //no protocol set
-            $message = new PlainMessage($resource->getStreamReader()->read(1024));
+            $message = new PlainMessage($streamReader->read(1024));
         } else {
             $protocol = $protocols->current();
-            $streamReader = $resource->getStreamReader();
-            $ret = $protocol->onRead($streamReader, $messageEnvelope);
+            $ret = $protocol->onRead($streamReader, $messageEnvelope, $resource);
             if ($ret === false) { //protocol not finished
                 if ($resource->isSync()) {
-                    while (($ret = $protocol->onRead($streamReader, $messageEnvelope)) !== false) { //retry until protocol finished
+                    while (($ret = $protocol->onRead($streamReader, $messageEnvelope, $resource)) !== false) { //retry until protocol finished
                         usleep(1000); //decrease cpu ticks
                     };
                 } else {
                     return false;
                 }
-            }else {
-                if(is_string($ret)){
-                    $ret = new PlainMessage($ret);
-                }
-                if($ret instanceof Message){
+            }else if(is_string($ret) || $ret instanceof Message){
                     $messageEnvelope->setMessage($ret);
-                }
             }
 
             $protocols->next();
@@ -205,11 +231,7 @@ class ResourceManager
         }
 
         if((string)$message){
-            $this->events->fire("resource.message", [$resource, $message]);
-        }
-
-        if ($resource->isEnd()) {
-            $this->events->fire("resource.end", [$resource]);
+            $this->emitter->emit("data", [$message, $resource]);
         }
 
         return $message;
@@ -224,46 +246,42 @@ class ResourceManager
     public function write(Resource $resource, $message)
     {
         if($message instanceof MessageEnvelope){
-            $protocols = $message->getProtocols();
             $messageEnvelope = $message;
         }else {
-            $protocols = clone $this->protocols;
-            $protocols->setIteratorMode(\SplDoublyLinkedList::IT_MODE_LIFO);
-            $protocols->rewind();
-            $messageEnvelope = new MessageEnvelope($resource, $protocols);
-            $messageEnvelope->setMessage(new PlainMessage($message));
+            $messageEnvelope = MessageEnvelope::make($resource, $message);
+            $messageEnvelope->getProtocols()->setIteratorMode(\SplDoublyLinkedList::IT_MODE_LIFO);
         }
+
+        $protocols = $messageEnvelope->getProtocols();
 
         $ret = null;
         while($protocols->valid()){
             $protocol = $protocols->current();
-            $ret = $protocol->onWrite($messageEnvelope);
+            $ret = $protocol->onWrite($messageEnvelope, $resource);
             if ($ret === false) {
                 if ($resource->isSync()) {
-                    while (($ret = $protocol->onWrite($messageEnvelope)) !== false) {
+                    while (($ret = $protocol->onWrite($messageEnvelope, $resource)) !== false) {
                         usleep(1000); //decrease cpu ticks
                     }
                 }else{
                     break;
                 }
-            }else {
-                if(is_string($ret)){
-                    $ret = new PlainMessage($ret);
-                }
-                if($ret instanceof Message){
-                    $messageEnvelope->setMessage($ret);
-                }
-//                var_dump((string)$ret);
+            }else if(is_string($ret) || $ret instanceof Message){
+                $messageEnvelope->setMessage($ret);
             }
             $protocols->next();
         }
 
         $message = (string)$messageEnvelope->getMessage();
+
+        $handle = $resource->getHandle();
+
         if($resource->isSync()){
-            return $resource->getTransport()->write($message);
+            return $handle->write($message);
         }
+
         if($ret !== false){
-            $resource->getBuffer()->write($resource, $message);
+            $handle->getBuffer()->write($message);
         }
         return true;
     }
@@ -275,10 +293,41 @@ class ResourceManager
      */
     public function close(Resource $resource)
     {
-        $this->loop->nextTick(function (LoopInterface $loop) use ($resource) {
-            $loop->removeStream($resource->getHandle());
-            $resource->getTransport()->close();
-        });
+        $protocols = clone $this->protocols;
+        $protocols->setIteratorMode(\SplDoublyLinkedList::IT_MODE_LIFO);
+
+        $handle = $resource->getHandle();
+        $buffer = $handle->getBuffer();
+
+        $buffer->pull($handle);
+
+        $this->emitter->emit("close", [$resource]);
+        foreach($protocols as $protocol){
+            /**
+             * @var Protocol $protocol
+             */
+            $protocol->onClose($resource);
+        }
+
+        if($resource->isSync()){
+            $this->emitter->emit("end", [$resource]);
+            return $handle->close();
+        }
+
+        $emitter = $this->emitter;
+        $gracefulClose = null;
+        $gracefulClose = function (LoopInterface $loop) use ($handle, $resource, $buffer, $emitter, &$gracefulClose) {
+            if($buffer->isEmpty($handle)){
+                $loop->removeStream($handle->get());
+                $emitter->emit("end", [$resource]);
+                $handle->close();
+                return;
+            }
+            $loop->nextTick($gracefulClose);
+        };
+
+        $this->loop->nextTick($gracefulClose);
+        return true;
     }
 
     /**
@@ -288,13 +337,15 @@ class ResourceManager
     {
         /**
          * @var \trochilidae\Sockets\Resource $resource
+         * @var \trochilidae\Sockets\Handle $rHandle
          */
-        $resource = $this->handles[(int)$handle];
+        $resource = $this->resources[(int)$handle];
+        $rHandle = $this->handles[(int)$handle];
 
         $ret = $this->read($resource);
 
         if (!is_null($ret)) {
-            if ($this->hasMoreData($resource)) {
+            if ($this->hasMoreData($rHandle)) {
                 $callback = [$this, $this->asyncReadHandle];
                 $this->loop->nextTick(function () use ($callback, $handle) {
                     $callback[0]->$callback[1]($handle);
@@ -309,59 +360,60 @@ class ResourceManager
     public function handleAsyncWrite($handle)
     {
         /**
-         * @var \trochilidae\Sockets\Resource $resource
+         * @var \trochilidae\Sockets\Handle $rHandle
          */
-        $resource = $this->handles[(int)$handle];
-        $buffer   = $resource->getBuffer();
-        if(!$buffer->isEmpty($resource)){
-            $message = $buffer->pop($handle);
-            $written = $resource->getTransport()->write($message);
+        $rHandle = $this->handles[(int)$handle];
+
+        $buffer   = $rHandle->getBuffer();
+        if(!$buffer->isEmpty()){
+            $message = $buffer->pop();
+            $written = $rHandle->write($message);
             if($written != strlen($message)){
-                $buffer->unshift($resource, substr($message, $written));
+                $buffer->unshift(substr($message, $written));
             }
         }
     }
 
     /**
-     * @param \trochilidae\Sockets\Resource $resource
+     * @param \trochilidae\Sockets\Handle $handle
      *
      * @return bool
      */
-    protected function hasMoreData(Resource $resource)
+    protected function hasMoreData(Handle $handle)
     {
-        return strlen($resource->getStreamReader()->peak(1)) > 0;
+        return strlen($handle->getStreamReader()->peak(1)) > 0;
     }
 
     /**
-     * @param resource $handle
+     * @param Handle $handle
      */
-    protected function enableRead($handle)
+    protected function enableRead(Handle $handle)
     {
-        $this->loop->addReadStream($handle, [$this, $this->asyncReadHandle]);
+        $this->loop->addReadStream($handle->get(), [$this, $this->asyncReadHandle]);
     }
 
     /**
-     * @param resource $handle
+     * @param Handle $handle
      */
-    protected function disableRead($handle)
+    protected function disableRead(Handle $handle)
     {
-        $this->loop->removeReadStream($handle);
+        $this->loop->removeReadStream($handle->get());
     }
 
     /**
-     * @param resource $handle
+     * @param Handle $handle
      */
-    protected function enableWrite($handle)
+    protected function enableWrite(Handle $handle)
     {
-        $this->loop->addWriteStream($handle, [$this, $this->asyncWriteHandle]);
+        $this->loop->addWriteStream($handle->get(), [$this, $this->asyncWriteHandle]);
     }
 
     /**
-     * @param resource $handle
+     * @param Handle $handle
      */
-    protected function disableWrite($handle)
+    protected function disableWrite(Handle $handle)
     {
-        $this->loop->removeWriteStream($handle);
+        $this->loop->removeWriteStream($handle->get());
     }
 
 } 

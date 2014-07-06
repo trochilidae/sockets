@@ -11,12 +11,45 @@ namespace trochilidae\Sockets;
 use React\EventLoop\LoopInterface;
 use trochilidae\Sockets\Message\MessageBuilder;
 
-abstract class Protocol {
+abstract class Protocol
+{
 
-    abstract function onRead(StreamReader $reader, MessageEnvelope $message);
+    /**
+     * @param StreamReader                  $reader
+     * @param MessageEnvelope               $message
+     * @param \trochilidae\Sockets\Resource $resource
+     *
+     * @return mixed
+     */
+    abstract function onRead(StreamReader $reader, MessageEnvelope $message, Resource $resource);
 
-    abstract function onWrite(MessageEnvelope $message);
+    /**
+     * @param MessageEnvelope               $message
+     * @param \trochilidae\Sockets\Resource $resource
+     *
+     * @return mixed
+     */
+    abstract function onWrite(MessageEnvelope $message, Resource $resource);
 
+    /**
+     * @param \trochilidae\Sockets\Resource $resource
+     *
+     * @return mixed
+     */
     abstract function onClose(Resource $resource);
+
+    /**
+     * @param \trochilidae\Sockets\Resource          $resource
+     * @param                                        $message
+     *
+     * @return bool
+     */
+    protected function write(Resource $resource, $message)
+    {
+        $messageEnvelope = MessageEnvelope::make($resource, $message, $this);
+        $messageEnvelope->getProtocols()->setIteratorMode(\SplDoublyLinkedList::IT_MODE_LIFO);
+
+        return $resource->write($messageEnvelope);
+    }
 
 } 

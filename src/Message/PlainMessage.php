@@ -13,9 +13,16 @@ use trochilidae\Sockets\Exceptions\InvalidArgumentException;
 
 class PlainMessage implements Message {
 
-
+    /**
+     * @var string
+     */
     protected $string = "";
 
+    /**
+     * @param string $string
+     *
+     * @throws \trochilidae\Sockets\Exceptions\InvalidArgumentException
+     */
     function __construct($string = "")
     {
         if(!is_string($string)){
@@ -25,7 +32,9 @@ class PlainMessage implements Message {
         $this->string = $string;
     }
 
-
+    /**
+     * @return string
+     */
     function __toString()
     {
         return $this->string;

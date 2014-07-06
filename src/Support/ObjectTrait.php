@@ -11,10 +11,19 @@ namespace trochilidae\Sockets\Support;
 
 trait ObjectTrait {
 
+    /**
+     * @var array
+     */
     protected static $identifiers = [];
 
+    /**
+     * @var string
+     */
     protected $id;
 
+    /**
+     * @return string
+     */
     public function getHash(){
         if(is_null($this->id)){
             $id = sha1(spl_object_hash($this));

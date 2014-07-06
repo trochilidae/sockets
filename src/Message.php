@@ -11,6 +11,9 @@ namespace trochilidae\Sockets;
 
 interface Message {
 
+    /**
+     * @return string
+     */
     function __toString();
 
-} 
+}

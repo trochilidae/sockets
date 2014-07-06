@@ -2,6 +2,13 @@
 
 if (!function_exists("str_replace_last")) {
 
+    /**
+     * @param $search
+     * @param $replace
+     * @param $str
+     *
+     * @return mixed
+     */
     function str_replace_last($search, $replace, $str)
     {
         if (($pos = strrpos($str, $search)) !== false) {

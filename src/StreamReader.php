@@ -10,17 +10,12 @@ namespace trochilidae\Sockets;
 
 use trochilidae\Sockets\Message;
 use trochilidae\Sockets\Resource;
-use trochilidae\Sockets\Transport;
+use trochilidae\Sockets\Handle;
 
 class StreamReader {
 
     /**
-     * @var Resource
-     */
-    protected $resource;
-
-    /**
-     * @var Transport
+     * @var Handle
      */
     protected $transport;
 
@@ -35,28 +30,11 @@ class StreamReader {
     protected $message;
 
     /**
-     * @param \trochilidae\Sockets\Resource $resource
+     * @param \trochilidae\Sockets\Handle $transport
      */
-    function __construct(Resource $resource)
+    function __construct(Handle $transport)
     {
-        $this->resource = $resource;
-        $this->transport = $resource->getTransport();
-    }
-
-    /**
-     * @return \trochilidae\Sockets\Resource $resource
-     */
-    public function getResource()
-    {
-        return $this->resource;
-    }
-
-    /**
-     * @return resource
-     */
-    public function getHandle()
-    {
-        return $this->resource->getHandle();
+        $this->transport = $transport;
     }
 
     /**
