@@ -15,11 +15,6 @@ abstract class Resource
     use ObjectTrait;
 
     /**
-     * @var bool
-     */
-    protected $isPaused = true;
-
-    /**
      * @var array
      */
     protected $storage = [];
@@ -43,18 +38,29 @@ abstract class Resource
     }
 
     /**
-     * @return ProtocolList
-     */
-    public function getProtocols(){
-        return $this->resourceManager->getProtocols();
-    }
-
-    /**
      * @return Handle
      */
     public function getHandle()
     {
         return $this->handle;
+    }
+
+    public function getStatus()
+    {
+        if($this->isClosed()){
+            return ResourceStatusStore::STATUS_CLOSED;
+        }else if(is_null($this->resourceManager)){
+            return ResourceStatusStore::STATUS_DISCONNECTED;
+        }
+        return $this->resourceManager->getStatus($this);
+    }
+
+    /**
+     * @return ProtocolList
+     */
+    public function getProtocols()
+    {
+        return $this->_getResourceManager()->getProtocols();
     }
 
     /**
@@ -63,10 +69,25 @@ abstract class Resource
      */
     public function pause()
     {
-        if ($this->resourceManager) {
-            $this->resourceManager->pause($this);
-        }
-        $this->isPaused = true;
+        $this->_getResourceManager()->pause($this);
+    }
+
+    /**
+     * Pause read and write on the resource
+     * @return void
+     */
+    public function pauseRead()
+    {
+        $this->_getResourceManager()->pauseRead($this);
+    }
+
+    /**
+     * Pause read and write on the resource
+     * @return void
+     */
+    public function pauseWrite()
+    {
+        $this->_getResourceManager()->pauseWrite($this);
     }
 
     /**
@@ -74,10 +95,23 @@ abstract class Resource
      */
     public function resume()
     {
-        if ($this->resourceManager) {
-            $this->resourceManager->resume($this);
-        }
-        $this->isPaused = false;
+        $this->_getResourceManager()->resume($this);
+    }
+
+    /**
+     * Resume read and write on the resource
+     */
+    public function resumeRead()
+    {
+        $this->_getResourceManager()->resumeRead($this);
+    }
+
+    /**
+     * Resume read and write on the resource
+     */
+    public function resumeWrite()
+    {
+        $this->_getResourceManager()->resumeWrite($this);
     }
 
     /**
@@ -85,11 +119,7 @@ abstract class Resource
      */
     public function read()
     {
-        if ($this->resourceManager && $this->isSync()) {
-            return $this->resourceManager->read($this);
-        }
-
-        return false;
+        return $this->_getResourceManager()->read($this);
     }
 
     /**
@@ -99,18 +129,16 @@ abstract class Resource
      */
     public function write($message)
     {
-        if ($this->resourceManager) {
-            return $this->resourceManager->write($this, $message);
-        }
-
-        return false;
+        return $this->_getResourceManager()->write($this, $message);
     }
 
     /**
+     * @param bool $graceful
      * @return bool
      */
-    public function close(){
-        return $this->resourceManager->close($this);
+    public function close($graceful = true)
+    {
+        return $this->_getResourceManager()->close($this, $graceful);
     }
 
     /**
@@ -124,15 +152,33 @@ abstract class Resource
     /**
      * @return bool
      */
-    public function isReadable(){
+    public function isReadable()
+    {
         return $this->handle->isReadable();
     }
 
     /**
      * @return bool
      */
-    public function isWritable(){
+    public function isWritable()
+    {
         return $this->handle->isWritable();
+    }
+
+    /**
+     * @return bool
+     */
+    public function isConnecting()
+    {
+        return $this->getStatus() === ResourceStatusStore::STATUS_CONNECTING;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isConnected()
+    {
+        return $this->getStatus() === ResourceStatusStore::STATUS_CONNECTED;
     }
 
     /**
@@ -140,7 +186,39 @@ abstract class Resource
      */
     public function isPaused()
     {
-        return $this->isPaused;
+        return $this->getStatus() === ResourceStatusStore::STATUS_PAUSED;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isPausedRead()
+    {
+        return $this->getStatus() === ResourceStatusStore::STATUS_PAUSED_READ;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isPausedWrite()
+    {
+        return $this->getStatus() === ResourceStatusStore::STATUS_PAUSED_WRITE;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isClosing()
+    {
+        return $this->getStatus() === ResourceStatusStore::STATUS_CLOSING;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isDisconnected()
+    {
+        return $this->getStatus() === ResourceStatusStore::STATUS_DISCONNECTED;
     }
 
     /**
@@ -184,9 +262,11 @@ abstract class Resource
      */
     public function __get($name)
     {
-        if (isset($this->storage[$name])) {
-            return $this->storage[$name];
+        if (!isset($this->storage[$name])) {
+            return null;
         }
+
+        return $this->storage[$name];
     }
 
     /**
@@ -198,5 +278,26 @@ abstract class Resource
         $this->storage[$name] = $value;
     }
 
+    /**
+     * @param ResourceManager $resourceManager
+     * @param array $context
+     */
+    protected function _setResourceManager(ResourceManager $resourceManager, array $context = null)
+    {
+        if (!is_null($this->resourceManager)) {
+            $this->resourceManager->detach($this);
+        }
+        $this->resourceManager = $resourceManager;
+        $resourceManager->attach($this, $context);
+    }
+
+    protected function _getResourceManager($required = true)
+    {
+        if ($required && is_null($this->resourceManager)) {
+            throw new \Exception();
+        }
+
+        return $this->resourceManager;
+    }
 
 }

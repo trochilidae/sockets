@@ -9,8 +9,6 @@
 namespace trochilidae\Sockets;
 
 use trochilidae\Sockets\Message;
-use trochilidae\Sockets\Resource;
-use trochilidae\Sockets\Handle;
 
 class StreamReader {
 
@@ -44,7 +42,7 @@ class StreamReader {
      *
      * @return string
      */
-    public function peak($length){
+    public function peek($length){
         $seen = strlen($this->seen);
         if(($toRead = $length - $seen) > 0){
             $this->seen .= $this->transport->read($toRead);

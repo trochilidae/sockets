@@ -54,6 +54,7 @@ class MessageEnvelope implements Message
             $protocols = $protocols->filterByProtocol($currentProtocol);
         }
         $protocols->setIteratorMode(\SplDoublyLinkedList::IT_MODE_LIFO);
+        $protocols->rewind();
         $self = new self($resource, $protocols);
         $self->setMessage($defaultMessage);
 

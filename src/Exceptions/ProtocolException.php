@@ -19,7 +19,7 @@ class ProtocolException extends \Exception {
 
     function __construct(Resource $resource, $message = "")
     {
-        if(!($protocol = get_calling_class()) instanceof Protocol){
+        if(!($protocol = get_calling_class(true)) instanceof Protocol){
             throw new \RuntimeException("");
         }
         $this->message = MessageEnvelope::make($resource, $message, $protocol);

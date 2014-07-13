@@ -9,11 +9,9 @@
 namespace trochilidae\Sockets\Socket;
 
 use Evenement\EventEmitter;
-use Illuminate\Support\Facades\Event;
 use React\EventLoop\LoopInterface;
 use trochilidae\Sockets\Connection;
 use trochilidae\Sockets\Exceptions\ConnectionException;
-use trochilidae\Sockets\Resource;
 use trochilidae\Sockets\ResourceManager;
 use trochilidae\Sockets\Handles\DefaultHandle;
 
@@ -22,27 +20,44 @@ class Server extends EventEmitter {
     /**
      * @var \trochilidae\Sockets\Handle
      */
-    protected $transport;
+    protected $handle;
 
     /**
      * @var ResourceManager
      */
     protected $manager;
 
+    protected $connections;
+
     /**
      * @var \React\EventLoop\LoopInterface
      */
     protected $loop;
 
-    function __construct(LoopInterface $loop = null)
+    protected $context = [];
+
+    function __construct(LoopInterface $loop = null, array $context = [])
     {
         $this->manager = new ResourceManager($loop);
         $this->loop = $this->manager->getLoop();
         $this->manager->setEventEmitter($this);
+        $this->connections = new \SplObjectStorage();
+        $this->context = $context;
+        $this->on("disconnect", function(Connection $conn){
+            $this->connections->detach($conn);
+        });
+    }
+
+    public function getResourceManager(){
+        return $this->manager;
     }
 
     public function setProtocols($protocol){
         $this->manager->setProtocols($protocol);
+    }
+
+    public function setContext(array $context){
+        $this->context = $context;
     }
 
     /**
@@ -64,28 +79,23 @@ class Server extends EventEmitter {
             throw new ConnectionException($message, $errno);
         }
 
-        $this->transport = new DefaultHandle($handle);
-        $this->transport->setNonBlocking();
+        $this->handle = new DefaultHandle($handle);
+        $this->handle->setNonBlocking();
 
         $this->loop->addReadStream($handle, function ($handle) {
-            $newSocket = stream_socket_accept($handle);
-            if (false === $newSocket) {
-                $this->emit('error', array(new \RuntimeException('Error accepting new connection')));
-                return;
-            }
-            $this->handleConnection($newSocket);
+            $this->handleConnection($handle);
         });
 
         return $this;
     }
 
-    public function handleConnection($socket)
-    {
-        $this->transport->setNonBlocking();
-
-        $client = $this->createConnection($socket);
-
-        $this->emit('connection', array($client));
+    protected function handleConnection($handle){
+        $socket = stream_socket_accept($handle);
+        if (false === $socket) {
+            $this->emit('error', array(new \RuntimeException('Error accepting new connection')));
+            return;
+        }
+        $this->createConnection($socket);
     }
 
     /**
@@ -93,23 +103,25 @@ class Server extends EventEmitter {
      */
     public function getPort()
     {
-        $name = stream_socket_get_name($this->transport->getHandle(), false);
+        $name = stream_socket_get_name($this->handle->get(), false);
 
         return (int) substr(strrchr($name, ':'), 1);
     }
 
     /**
-     *
+     * @param bool $graceful
      */
-    public function shutdown()
+    public function shutdown($graceful = true)
     {
-//        $this->loop->removeStream($this->transport->getHandle());
-//        $this->transport->close();
-//        $transport = $this->transport;
-//        $this->loop->nextTick(function(LoopInterface $loop) use($transport){
-//            $loop->removeStream($transport->getHandle());
-//            $transport->close();
-//        });
+        $this->loop->removeStream($this->handle->get());
+        $this->handle->close();
+
+        foreach($this->connections as $conn){
+            /**
+             * @var Connection $conn
+             */
+            $conn->close($graceful);
+        }
     }
 
     /**
@@ -117,10 +129,11 @@ class Server extends EventEmitter {
      *
      * @return Resource
      */
-    public function createConnection($socket)
+    protected function createConnection($socket)
     {
         $handle = new DefaultHandle($socket);
         $conn = new Connection($handle);
-        $conn->setResourceManager($this->manager);
+        $this->connections->attach($conn);
+        $conn->setServer($this, $this->context);
     }
 }

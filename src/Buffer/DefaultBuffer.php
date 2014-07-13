@@ -45,7 +45,7 @@ class DefaultBuffer implements Buffer
         $this->queue[$key][] = $message;
         $this->length += strlen($message);
 
-        return $this->length >= $this->maxSize;
+        return $this->getSize() >= $this->maxSize;
     }
 
     /**
@@ -56,7 +56,6 @@ class DefaultBuffer implements Buffer
     public function isEmpty(Handle $handle)
     {
         $key = $handle->toInt();
-
         return empty($this->queue[$key]);
     }
 
@@ -75,7 +74,7 @@ class DefaultBuffer implements Buffer
         array_unshift($this->queue[$key], $message);
         $this->length += strlen($message);
 
-        return $this->length >= $this->maxSize;
+        return $this->getSize() >= $this->maxSize;
     }
 
     /**
@@ -83,7 +82,7 @@ class DefaultBuffer implements Buffer
      *
      * @return mixed|null
      */
-    public function pop(Handle $handle)
+    public function shift(Handle $handle)
     {
         $key = $handle->toInt();
 
@@ -91,7 +90,7 @@ class DefaultBuffer implements Buffer
             return null;
         }
 
-        $message = array_pop($this->queue[$key]);
+        $message = array_shift($this->queue[$key]);
         if (!is_null($message)) {
             $this->length -= strlen($message);
 
@@ -113,7 +112,7 @@ class DefaultBuffer implements Buffer
         if (isset($this->queue[$key])) {
             $messages = $this->queue[$key];
             unset($this->queue[$key]);
-            $this->length -= $this->getSize($messages);
+            $this->length -= $this->calculateSize($messages);
         }
 
         return $messages;
@@ -127,10 +126,14 @@ class DefaultBuffer implements Buffer
     {
         $key = $handle->toInt();
         if (isset($this->queue[$key])) {
-            $this->length -= $this->getSize($this->queue[$key]);
+            $this->length -= $this->calculateSize($this->queue[$key]);
         }
         $this->queue[$key] = $messages;
-        $this->length += $this->getSize($messages);
+        $this->length += $this->calculateSize($messages);
+    }
+
+    public function getSize(){
+        return $this->length;
     }
 
     /**
@@ -138,7 +141,7 @@ class DefaultBuffer implements Buffer
      *
      * @return int
      */
-    public function getSize(array &$messages)
+    protected function calculateSize(array &$messages)
     {
         $len = 0;
         array_walk($messages, function ($value) use (&$len) {

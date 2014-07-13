@@ -13,6 +13,13 @@ use trochilidae\Sockets\Message\MessageBuilder;
 
 abstract class Protocol
 {
+    protected $requiresHandshake = false;
+
+    /**
+     * @param \trochilidae\Sockets\Resource $resource
+     * @return mixed
+     */
+    abstract function onOpen(Resource $resource);
 
     /**
      * @param StreamReader                  $reader
@@ -37,6 +44,13 @@ abstract class Protocol
      * @return mixed
      */
     abstract function onClose(Resource $resource);
+
+    /**
+     * @return bool
+     */
+    public function requiresHandshake(){
+        return $this->requiresHandshake;
+    }
 
     /**
      * @param \trochilidae\Sockets\Resource          $resource

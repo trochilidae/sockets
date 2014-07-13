@@ -18,18 +18,16 @@ interface Buffer
     public function unshift(Handle $handle, $message);
 
     /**
-     * @param array $messages
-     *
      * @return int
      */
-    public function getSize(array &$messages);
+    public function getSize();
 
     /**
      * @param Handle $handle
      *
      * @return mixed|null
      */
-    public function pop(Handle $handle);
+    public function shift(Handle $handle);
 
     /**
      * @param Handle $handle

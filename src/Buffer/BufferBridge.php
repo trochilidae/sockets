@@ -44,19 +44,17 @@ class BufferBridge {
     }
 
     /**
-     * @param array $messages
-     *
      * @return int
      */
-    public function getSize(array &$messages){
-        return $this->buffer->getSize($messages);
+    public function getSize(){
+        return $this->buffer->getSize();
     }
 
     /**
      * @return mixed|null
      */
-    public function pop(){
-        return $this->buffer->pop($this->handle);
+    public function shift(){
+        return $this->buffer->shift($this->handle);
     }
 
     /**

@@ -106,6 +106,12 @@ abstract class Handle {
     }
 
     /**
+     * @param array $context
+     * @return mixed
+     */
+    public abstract function setContext(array $context = []);
+
+    /**
      * @param $length
      *
      * @return string|bool
@@ -118,6 +124,12 @@ abstract class Handle {
      * @return null|bool|int
      */
     public abstract function write($message);
+
+    /**
+     * @param $length
+     * @return string
+     */
+    public abstract function peek($length);
 
     /**
      * @return bool

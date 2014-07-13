@@ -17,7 +17,8 @@
     },
     "autoload": {
         "psr-4":{
-            "trochilidae\\Sockets\\": "src"
+            "trochilidae\\Sockets\\": "src",
+            "Ratchet\\WebSocket\\": "src/Protocols/websocket"
         },
         "files": [
             "src/Helpers/Helper.php",

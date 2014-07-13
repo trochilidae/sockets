@@ -43,6 +43,15 @@ class DefaultHandle extends Handle
     }
 
     /**
+     * @param array $context
+     * @return bool
+     */
+    public function setContext(array $context = [])
+    {
+        return stream_context_set_params($this->handle, $context);
+    }
+
+    /**
      * @param $length
      *
      * @return bool|string
@@ -66,6 +75,17 @@ class DefaultHandle extends Handle
         return fwrite($this->handle, $message);
     }
 
+    /**
+     * @param $length
+     * @return string
+     */
+    public function peek($length){
+        return stream_socket_recvfrom($this->handle, $length, STREAM_PEEK);
+    }
+
+    /**
+     * @return bool
+     */
     public function close(){
         return fclose($this->handle);
     }

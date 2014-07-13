@@ -2,21 +2,24 @@
 
 namespace trochilidae\Sockets;
 
+use trochilidae\Sockets\Socket\Server;
+
 class Connection extends Resource {
 
-    //TODO: Find best returns for if resource is closed or resource manager not assigned
+    /**
+     * @param Handle $handle
+     */
+    function __construct($handle)
+    {
+        parent::__construct($handle);
+    }
 
     /**
-     * @param ResourceManager $resourceManager
+     * @param Server $server
+     * @param array $context
      */
-    public function setResourceManager(ResourceManager $resourceManager)
-    {
-        //TODO: Think about messages already in buffer requiring specific protocols
-        if (!is_null($this->resourceManager)) {
-            $this->resourceManager->detach($this);
-        }
-        $this->resourceManager = $resourceManager;
-        $resourceManager->attach($this);
+    public function setServer(Server $server, array $context = null){
+        $this->_setResourceManager($server->getResourceManager(), $context);
     }
 
 } 

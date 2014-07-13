@@ -18,6 +18,21 @@ class ProtocolList extends \SplDoublyLinkedList {
      */
     protected $values = [];
 
+    protected $handshakeProtocols;
+
+    public function __construct(){
+        $this->handshakeProtocols = new \SplObjectStorage();
+    }
+
+    public function requiresHandshake(){
+        return $this->handshakeProtocols->count() == count($this->values);
+    }
+
+    public function setIteratorMode ($mode) {
+        parent::setIteratorMode($mode);
+        $this->rewind();
+    }
+
     /**
      * (PHP 5 &gt;= 5.3.0)<br/>
      * Pops a node from the end of the doubly linked list
@@ -25,7 +40,8 @@ class ProtocolList extends \SplDoublyLinkedList {
      * @return mixed The value of the popped node.
      */
     public function pop () {
-        array_pop($this->values);
+        $value = array_pop($this->values);
+        $this->detachHandshakeProtocol($value);
         return parent::pop();
     }
 
@@ -36,7 +52,8 @@ class ProtocolList extends \SplDoublyLinkedList {
      * @return mixed The value of the shifted node.
      */
     public function shift () {
-        array_shift($this->values);
+        $value = array_shift($this->values);
+        $this->detachHandshakeProtocol($value);
         return parent::shift();
     }
 
@@ -57,6 +74,7 @@ class ProtocolList extends \SplDoublyLinkedList {
             throw new InvalidArgumentException();
         }
         $this->values[] = $value;
+        $this->attachHandshakeProtocol($value);
         parent::push($value);
     }
 
@@ -76,6 +94,7 @@ class ProtocolList extends \SplDoublyLinkedList {
         if(!$value instanceof Protocol){
             throw new InvalidArgumentException();
         }
+        $this->attachHandshakeProtocol($value);
         array_unshift($this->values, $value);
         parent::unshift($value);
     }
@@ -99,7 +118,11 @@ class ProtocolList extends \SplDoublyLinkedList {
         if(!is_int($index) && !$newval instanceof Protocol){
             throw new InvalidArgumentException();
         }
+        if(isset($this->values[$index])){
+            unset($this[$index]);
+        }
         $this->values[$index] = $newval;
+        $this->attachHandshakeProtocol($newval);
         parent::offsetSet($index, $newval);
     }
 
@@ -113,6 +136,8 @@ class ProtocolList extends \SplDoublyLinkedList {
      * @return void
      */
     public function offsetUnset ($index) {
+        $value = $this->values[$index];
+        $this->detachHandshakeProtocol($value);
         unset($this->values[$index]);
         parent::offsetUnset($index);
     }
@@ -139,6 +164,18 @@ class ProtocolList extends \SplDoublyLinkedList {
             $self->push($protocol);
         }, $values);
         return $self;
+    }
+
+    protected function attachHandshakeProtocol(Protocol $value){
+        if($value->requiresHandshake()){
+            $this->handshakeProtocols->attach($value);
+        }
+    }
+
+    protected function detachHandshakeProtocol(Protocol $value){
+        if($value->requiresHandshake()){
+            $this->handshakeProtocols->detach($value);
+        }
     }
 
 } 

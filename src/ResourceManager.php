@@ -10,6 +10,7 @@ namespace trochilidae\Sockets;
 
 use Evenement\EventEmitter;
 use React\EventLoop\Factory;
+use SplDoublyLinkedList;
 use trochilidae\Sockets\Exceptions\InvalidArgumentException;
 use React\EventLoop\LoopInterface;
 use trochilidae\Sockets\Message\PlainMessage;
@@ -42,6 +43,8 @@ class ResourceManager
      */
     protected $resources = [];
 
+    protected $resourceStatus = [];
+
     /**
      * @var array
      */
@@ -56,6 +59,8 @@ class ResourceManager
      * @var EventEmitter
      */
     protected $emitter;
+
+    protected $context = [];
 
     /**
      * @param LoopInterface $loop
@@ -86,28 +91,21 @@ class ResourceManager
 
     /**
      * @param \trochilidae\Sockets\Resource $resource
+     * @return int
      */
-    public function attach(Resource $resource)
-    {
+    public function getStatus(Resource $resource){
         $handle = $resource->getHandle();
-        $this->resources[$handle->toInt()] = $resource;
-        $this->handles[$handle->toInt()] = $handle;
-
-        if ($resource->isPaused()) {
-            $resource->resume();
+        if(isset($this->resourceStatus[$handle->toInt()])){
+            return $this->resourceStatus[$handle->toInt()]->getStatus();
         }
-
+        return ResourceStatusStore::STATUS_DISCONNECTED;
     }
 
     /**
-     * @param \trochilidae\Sockets\Resource $resource
+     * @return ProtocolList
      */
-    public function detach(Resource $resource)
-    {
-        $resource->pause();
-        $handle = $resource->getHandle();
-        unset($this->resources[$handle->toInt()]);
-        unset($this->handles[$handle->toInt()]);
+    public function getProtocols(){
+        return $this->protocols;
     }
 
     /**
@@ -132,10 +130,50 @@ class ResourceManager
     }
 
     /**
-     * @return ProtocolList
+     * @param \trochilidae\Sockets\Resource $resource
+     * @param array $context
      */
-    public function getProtocols(){
-        return $this->protocols;
+    public function attach(Resource $resource, array $context = null)
+    {
+        $handle = $resource->getHandle();
+
+        $this->resources[$handle->toInt()] = $resource;
+        $this->handles[$handle->toInt()] = $handle;
+        $this->resourceStatus[$handle->toInt()] = new ResourceStatusStore();
+
+        if(!is_null($context)){
+            $context = array_merge($context, $this->context);
+            $handle->setContext($context);
+        }
+
+        $this->resumeRead($resource);
+        $this->resumeWrite($resource);
+
+        $this->setStatus($handle, ResourceStatusStore::STATUS_CONNECTING);
+        $this->emitter->emit("connecting", [$resource]);
+
+        $this->open($resource);
+
+        if(!$this->protocols->requiresHandshake()){
+            $this->setStatus($handle, ResourceStatusStore::STATUS_CONNECTED);
+            $this->emitter->emit("connected", [$resource]);
+        }
+    }
+
+    /**
+     * @param \trochilidae\Sockets\Resource $resource
+     */
+    public function detach(Resource $resource)
+    {
+        $this->pause($resource);
+        $handle = $resource->getHandle();
+
+        $this->setStatus($handle, ResourceStatusStore::STATUS_DISCONNECTED);
+        $this->emitter->emit("disconnect", [$resource]);
+
+        unset($this->resources[$handle->toInt()]);
+        unset($this->handles[$handle->toInt()]);
+        unset($this->resourceStatus[$handle->toInt()]);
     }
 
     /**
@@ -143,13 +181,40 @@ class ResourceManager
      */
     public function pause(Resource $resource)
     {
-        if (!$resource->isPaused() || $resource->isSync()) {
+        if ($resource->isSync()) {
             return;
         }
 
         $handle = $resource->getHandle();
 
+        $this->setStatus($handle, ResourceStatusStore::STATUS_PAUSED);
+
         $this->disableRead($handle);
+        $this->disableWrite($handle);
+
+    }
+
+    public function pauseRead(Resource $resource){
+        if ($resource->isSync() || $resource->isPaused() || $resource->isPausedRead()) {
+            return;
+        }else if($resource->isPausedWrite()){
+            $this->pause($resource);
+            return;
+        }
+        $handle = $resource->getHandle();
+        $this->setStatus($handle, ResourceStatusStore::STATUS_PAUSED_READ);
+        $this->disableRead($handle);
+    }
+
+    public function pauseWrite(Resource $resource){
+        if ($resource->isSync() || $resource->isPaused() || $resource->isPausedWrite()) {
+            return;
+        }else if($resource->isPausedRead()){
+            $this->pause($resource);
+            return;
+        }
+        $handle = $resource->getHandle();
+        $this->setStatus($handle, ResourceStatusStore::STATUS_PAUSED_WRITE);
         $this->disableWrite($handle);
     }
 
@@ -158,11 +223,13 @@ class ResourceManager
      */
     public function resume(Resource $resource)
     {
-        if (!$resource->isPaused() || $resource->isSync()) {
+        if ($resource->isSync()) {
             return;
         }
 
         $handle = $resource->getHandle();
+
+        $this->restoreStatus($handle);
 
         if ($resource->isReadable()) {
             $this->enableRead($handle);
@@ -170,6 +237,91 @@ class ResourceManager
 
         if ($resource->isWritable()) {
             $this->enableWrite($handle);
+        }
+
+    }
+
+    /**
+     * @param \trochilidae\Sockets\Resource $resource
+     */
+    public function resumeRead(Resource $resource){
+        if ($resource->isSync() || (!$resource->isDisconnected() && (!$resource->isPaused() || !$resource->isPausedRead()))) {
+            return;
+        }
+        $handle = $resource->getHandle();
+
+        $this->restoreStatus($handle);
+        if ($resource->isReadable()) {
+            $this->enableRead($handle);
+        }
+    }
+
+    /**
+     * @param \trochilidae\Sockets\Resource $resource
+     */
+    public function resumeWrite(Resource $resource){
+        if ($resource->isSync() || (!$resource->isDisconnected() && (!$resource->isPaused() || !$resource->isPausedWrite()))) {
+            return;
+        }
+        $handle = $resource->getHandle();
+
+        $this->restoreStatus($handle);
+        if ($resource->isWritable()) {
+            $this->enableWrite($handle);
+        }
+    }
+
+
+    /**
+     * @param resource $handle
+     */
+    public function handleAsyncRead($handle)
+    {
+        /**
+         * @var \trochilidae\Sockets\Resource $resource
+         * @var \trochilidae\Sockets\Handle $rHandle
+         */
+        $resource = $this->resources[(int)$handle];
+        $rHandle = $this->handles[(int)$handle];
+
+        $ret = $this->_read($resource);
+
+        if (!is_null($ret)) {
+            if ($this->hasMoreData($rHandle)) {
+                $callback = [$this, $this->asyncReadHandle];
+                $this->loop->nextTick(function () use ($callback, $handle) {
+                    $callback[0]->$callback[1]($handle);
+                });
+            }
+        }
+    }
+
+    /**
+     * @param resource $handle
+     */
+    public function handleAsyncWrite($handle)
+    {
+        /**
+         * @var \trochilidae\Sockets\Handle $rHandle
+         */
+        $rHandle = $this->handles[(int)$handle];
+
+        $buffer   = $rHandle->getBuffer();
+        if(!$buffer->isEmpty()){
+            $message = $buffer->shift();
+            $written = $rHandle->write($message);
+            if($written != strlen($message)){
+                $buffer->unshift(substr($message, $written));
+            }
+        }
+    }
+
+    protected function open(Resource $resource)
+    {
+        $protocols = clone $this->protocols;
+        $protocols->setIteratorMode(SplDoublyLinkedList::IT_MODE_FIFO);
+        foreach($protocols as $protocol){
+            $protocol->onOpen($resource);
         }
     }
 
@@ -180,9 +332,22 @@ class ResourceManager
      */
     public function read(Resource $resource)
     {
+        if($resource->isSync()){
+            return false;
+        }
+        return $this->_read($resource);
+    }
+
+    /**
+     * @param \trochilidae\Sockets\Resource $resource
+     *
+     * @return bool|null|Message|PlainMessage
+     */
+    protected function _read(Resource $resource)
+    {
         if (!$resource->isReadable() || $resource->isClosed()) {
             return null;
-        }else if ($resource->isEnd()) {
+        } else if ($resource->isEnd()) {
             $resource->close();
             return null;
         }
@@ -190,22 +355,23 @@ class ResourceManager
         /**
          * @var MessageEnvelope $messageEnvelope
          */
-        if(isset($this->pendingMessages[$resource->id])){
+        if (isset($this->pendingMessages[$resource->id])) {
             $messageEnvelope = $this->pendingMessages[$resource->id];
-        }else {
+        } else {
             $messageEnvelope = MessageEnvelope::make($resource);
-            $messageEnvelope->getProtocols()->setIteratorMode(\SplDoublyLinkedList::IT_MODE_FIFO);
+            $messageEnvelope->getProtocols()->setIteratorMode(SplDoublyLinkedList::IT_MODE_FIFO);
             $this->pendingMessages[$resource->id] = $messageEnvelope;
         }
-        $protocols = $messageEnvelope->getProtocols();
-        $handle = $resource->getHandle();
+
+        $protocols    = $messageEnvelope->getProtocols();
+        $handle       = $resource->getHandle();
         $streamReader = $handle->getStreamReader();
 
         if ($protocols->isEmpty()) { //no protocol set
             $message = new PlainMessage($streamReader->read(1024));
         } else {
             $protocol = $protocols->current();
-            $ret = $protocol->onRead($streamReader, $messageEnvelope, $resource);
+            $ret      = $protocol->onRead($streamReader, $messageEnvelope, $resource);
             if ($ret === false) { //protocol not finished
                 if ($resource->isSync()) {
                     while (($ret = $protocol->onRead($streamReader, $messageEnvelope, $resource)) !== false) { //retry until protocol finished
@@ -214,8 +380,8 @@ class ResourceManager
                 } else {
                     return false;
                 }
-            }else if(is_string($ret) || $ret instanceof Message){
-                    $messageEnvelope->setMessage($ret);
+            } else if (is_string($ret) || $ret instanceof Message) {
+                $messageEnvelope->setMessage($ret);
             }
 
             $protocols->next();
@@ -223,14 +389,21 @@ class ResourceManager
                 if ($resource->isSync()) {
                     return $this->read($resource); //recurse down
                 }
-                return true;
+
+                return false;
             }
 
             $message = $messageEnvelope->getMessage();
             unset($this->pendingMessages[$resource->id]);
         }
 
-        if((string)$message){
+        //TODO check for last stateful rather than assuming connected when done with first message
+        if($resource->isConnecting()){
+            $this->setStatus($handle, ResourceStatusStore::STATUS_CONNECTED);
+            $this->emitter->emit("connected", [$resource]);
+        }
+
+        if ((string)$message) {
             $this->emitter->emit("data", [$message, $resource]);
         }
 
@@ -249,7 +422,7 @@ class ResourceManager
             $messageEnvelope = $message;
         }else {
             $messageEnvelope = MessageEnvelope::make($resource, $message);
-            $messageEnvelope->getProtocols()->setIteratorMode(\SplDoublyLinkedList::IT_MODE_LIFO);
+            $messageEnvelope->getProtocols()->setIteratorMode(SplDoublyLinkedList::IT_MODE_LIFO);
         }
 
         $protocols = $messageEnvelope->getProtocols();
@@ -289,17 +462,24 @@ class ResourceManager
     /**
      * @param \trochilidae\Sockets\Resource $resource
      *
+     * @param bool $graceful
      * @return bool
      */
-    public function close(Resource $resource)
+    public function close(Resource $resource, $graceful = true)
     {
-        $protocols = clone $this->protocols;
-        $protocols->setIteratorMode(\SplDoublyLinkedList::IT_MODE_LIFO);
+        if($resource->isClosing()){
+            return null;
+        }
 
         $handle = $resource->getHandle();
+        $this->setStatus($handle, ResourceStatusStore::STATUS_CLOSING);
+
+        $protocols = clone $this->protocols;
+        $protocols->setIteratorMode(SplDoublyLinkedList::IT_MODE_LIFO);
+
         $buffer = $handle->getBuffer();
 
-        $buffer->pull($handle);
+//        $buffer->pull($handle);
 
         $this->emitter->emit("close", [$resource]);
         foreach($protocols as $protocol){
@@ -308,70 +488,29 @@ class ResourceManager
              */
             $protocol->onClose($resource);
         }
-
         if($resource->isSync()){
+            $this->detach($resource);
+            $close = $handle->close();
+            $this->setStatus($handle, ResourceStatusStore::STATUS_CLOSED);
             $this->emitter->emit("end", [$resource]);
-            return $handle->close();
+            return $close;
         }
 
-        $emitter = $this->emitter;
-        $gracefulClose = null;
-        $gracefulClose = function (LoopInterface $loop) use ($handle, $resource, $buffer, $emitter, &$gracefulClose) {
-            if($buffer->isEmpty($handle)){
+        $close = null;
+        $close = function (LoopInterface $loop) use ($handle, $resource, $buffer, $graceful, &$close) {
+            if($graceful !== true || $buffer->isEmpty($handle)){
                 $loop->removeStream($handle->get());
-                $emitter->emit("end", [$resource]);
+                $this->detach($resource);
                 $handle->close();
+                $this->setStatus($handle, ResourceStatusStore::STATUS_CLOSED);
+                $this->emitter->emit("end", [$resource]);
                 return;
             }
-            $loop->nextTick($gracefulClose);
+            $loop->futureTick($close);
         };
 
-        $this->loop->nextTick($gracefulClose);
+        $this->loop->futureTick($close);
         return true;
-    }
-
-    /**
-     * @param resource $handle
-     */
-    public function handleAsyncRead($handle)
-    {
-        /**
-         * @var \trochilidae\Sockets\Resource $resource
-         * @var \trochilidae\Sockets\Handle $rHandle
-         */
-        $resource = $this->resources[(int)$handle];
-        $rHandle = $this->handles[(int)$handle];
-
-        $ret = $this->read($resource);
-
-        if (!is_null($ret)) {
-            if ($this->hasMoreData($rHandle)) {
-                $callback = [$this, $this->asyncReadHandle];
-                $this->loop->nextTick(function () use ($callback, $handle) {
-                    $callback[0]->$callback[1]($handle);
-                });
-            }
-        }
-    }
-
-    /**
-     * @param resource $handle
-     */
-    public function handleAsyncWrite($handle)
-    {
-        /**
-         * @var \trochilidae\Sockets\Handle $rHandle
-         */
-        $rHandle = $this->handles[(int)$handle];
-
-        $buffer   = $rHandle->getBuffer();
-        if(!$buffer->isEmpty()){
-            $message = $buffer->pop();
-            $written = $rHandle->write($message);
-            if($written != strlen($message)){
-                $buffer->unshift(substr($message, $written));
-            }
-        }
     }
 
     /**
@@ -381,7 +520,19 @@ class ResourceManager
      */
     protected function hasMoreData(Handle $handle)
     {
-        return strlen($handle->getStreamReader()->peak(1)) > 0;
+        return strlen($handle->getStreamReader()->peek(1)) > 0;
+    }
+
+    protected function setStatus(Handle $handle, $status){
+        if(isset($this->resourceStatus[$handle->toInt()])){
+            $this->resourceStatus[$handle->toInt()]->setStatus($status);
+        }
+    }
+
+    protected function restoreStatus(Handle $handle){
+        if(isset($this->resourceStatus[$handle->toInt()])){
+            $this->resourceStatus[$handle->toInt()]->rememberPreviousStatus();
+        }
     }
 
     /**
@@ -415,5 +566,4 @@ class ResourceManager
     {
         $this->loop->removeWriteStream($handle->get());
     }
-
-} 
+}
