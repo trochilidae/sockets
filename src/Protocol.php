@@ -2,68 +2,51 @@
 /**
  * Created by PhpStorm.
  * User: kito
- * Date: 2014/06/04
- * Time: 17:17
+ * Date: 2014/07/13
+ * Time: 22:58
  */
-
 namespace trochilidae\Sockets;
 
-use React\EventLoop\LoopInterface;
-use trochilidae\Sockets\Message\MessageBuilder;
+use trochilidae\Sockets\Message\ReadableMessageEnvelope;
+use trochilidae\Sockets\Message\WritableMessageEnvelope;
 
-abstract class Protocol
+interface Protocol
 {
-    protected $requiresHandshake = false;
-
     /**
-     * @param \trochilidae\Sockets\Resource $resource
-     * @return mixed
+     * @return string
      */
-    abstract function onOpen(Resource $resource);
-
-    /**
-     * @param StreamReader                  $reader
-     * @param MessageEnvelope               $message
-     * @param \trochilidae\Sockets\Resource $resource
-     *
-     * @return mixed
-     */
-    abstract function onRead(StreamReader $reader, MessageEnvelope $message, Resource $resource);
-
-    /**
-     * @param MessageEnvelope               $message
-     * @param \trochilidae\Sockets\Resource $resource
-     *
-     * @return mixed
-     */
-    abstract function onWrite(MessageEnvelope $message, Resource $resource);
-
-    /**
-     * @param \trochilidae\Sockets\Resource $resource
-     *
-     * @return mixed
-     */
-    abstract function onClose(Resource $resource);
+    public function getName();
 
     /**
      * @return bool
      */
-    public function requiresHandshake(){
-        return $this->requiresHandshake;
-    }
+    public function requiresHandshake();
 
     /**
-     * @param \trochilidae\Sockets\Resource          $resource
-     * @param                                        $message
-     *
-     * @return bool
+     * @param \trochilidae\Sockets\Resource $resource
+     * @return mixed
      */
-    protected function write(Resource $resource, $message)
-    {
-        $messageEnvelope = MessageEnvelope::make($resource, $message, $this);
-        $messageEnvelope->getProtocols()->setIteratorMode(\SplDoublyLinkedList::IT_MODE_LIFO);
+    public function onOpen(Resource $resource);
 
-        return $resource->write($messageEnvelope);
-    }
+    /**
+     * @param WritableMessageEnvelope $message
+     * @param \trochilidae\Sockets\Resource $resource
+     * @return mixed
+     */
+    public function onWrite(WritableMessageEnvelope $message, Resource $resource);
 
-} 
+    /**
+     * @param \trochilidae\Sockets\Resource $resource
+     *
+     * @return mixed
+     */
+    public function onClose(Resource $resource);
+
+    /**
+     * @param ReadableMessageEnvelope $message
+     * @param \trochilidae\Sockets\Resource $resource
+     * @return mixed
+     */
+    public function onRead(ReadableMessageEnvelope $message, Resource $resource);
+
+}

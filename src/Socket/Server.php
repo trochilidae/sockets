@@ -52,8 +52,8 @@ class Server extends EventEmitter {
         return $this->manager;
     }
 
-    public function setProtocols($protocol){
-        $this->manager->setProtocols($protocol);
+    public function setProtocol($protocol){
+        $this->manager->setProtocol($protocol);
     }
 
     public function setContext(array $context){

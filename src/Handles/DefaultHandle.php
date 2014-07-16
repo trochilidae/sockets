@@ -125,7 +125,7 @@ class DefaultHandle extends Handle
     /**
      * @return bool
      */
-    public function isEnd()
+    public function eof()
     {
         return stream_eof($this->handle);
     }

@@ -56,11 +56,11 @@ abstract class Resource
     }
 
     /**
-     * @return ProtocolList
+     * @return string
      */
-    public function getProtocols()
+    public function protocol()
     {
-        return $this->_getResourceManager()->getProtocols();
+        return $this->_getResourceManager()->protocol();
     }
 
     /**
@@ -234,7 +234,7 @@ abstract class Resource
      */
     public function isEnd()
     {
-        return $this->handle->isEnd();
+        return $this->handle->eof();
     }
 
     /**

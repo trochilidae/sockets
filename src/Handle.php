@@ -35,11 +35,6 @@ abstract class Handle {
     protected $buffer;
 
     /**
-     * @var StreamReader
-     */
-    protected $streamReader;
-
-    /**
      * @param resource $handle
      * @param null     $flags
      *
@@ -58,26 +53,6 @@ abstract class Handle {
         } else {
             $this->setNonBlocking();
         }
-    }
-
-    /**
-     * @param StreamReader $streamReader
-     */
-    public function setStreamReader(StreamReader $streamReader)
-    {
-        $this->streamReader = $streamReader;
-    }
-
-    /**
-     * @return StreamReader
-     */
-    public function getStreamReader()
-    {
-        if (is_null($this->streamReader)) {
-            $this->streamReader = new StreamReader($this);
-        }
-
-        return $this->streamReader;
     }
 
     /**
@@ -164,7 +139,7 @@ abstract class Handle {
     /**
      * @return bool
      */
-    public abstract function isEnd();
+    public abstract function eof();
 
     /**
      * @return bool

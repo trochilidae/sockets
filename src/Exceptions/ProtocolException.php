@@ -10,7 +10,7 @@ namespace trochilidae\Sockets\Exceptions;
 
 
 use trochilidae\Sockets\MessageEnvelope;
-use trochilidae\Sockets\Protocol;
+use trochilidae\Sockets\BaseProtocol;
 use trochilidae\Sockets\Resource;
 
 class ProtocolException extends \Exception {
@@ -19,7 +19,7 @@ class ProtocolException extends \Exception {
 
     function __construct(Resource $resource, $message = "")
     {
-        if(!($protocol = get_calling_class(true)) instanceof Protocol){
+        if(!($protocol = get_calling_class(true)) instanceof BaseProtocol){
             throw new \RuntimeException("");
         }
         $this->message = MessageEnvelope::make($resource, $message, $protocol);
